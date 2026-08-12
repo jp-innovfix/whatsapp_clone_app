@@ -168,7 +168,7 @@ class MockBusinessRepository {
             MessageUi("m2", MessageDirection.Incoming, "", "12:09 am", voiceSeconds = 15),
             MessageUi("m3", MessageDirection.Incoming, "Could you send the updated ID card? 🌚", "12:10 am"),
             MessageUi("m4", MessageDirection.Outgoing, "", "12:11 am", DeliveryStatus.Read, voiceSeconds = 13),
-            MessageUi("m5", MessageDirection.Incoming, "I need it today 🌚", "12:11 am"),
+            MessageUi("m5", MessageDirection.Incoming, "I need it today 🌚", "12:11 am", reaction = "❤️"),
             MessageUi("m6", MessageDirection.Outgoing, "Try to get that", "12:12 am", DeliveryStatus.Read),
             MessageUi("m7", MessageDirection.Outgoing, "If you are good", "12:12 am", DeliveryStatus.Read),
             MessageUi("m8", MessageDirection.Outgoing, "Then you will", "12:12 am", DeliveryStatus.Read),

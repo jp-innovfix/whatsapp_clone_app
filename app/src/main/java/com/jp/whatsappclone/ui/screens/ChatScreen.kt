@@ -496,6 +496,7 @@ private fun MessageSelectionTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Close selection", tint = PrimaryText) }
+        Spacer(Modifier.width(16.dp))
         Text("1", color = PrimaryText, fontSize = 22.sp)
         Spacer(Modifier.weight(1f))
         IconButton(onClick = onReply) { Icon(Icons.Rounded.Reply, "Reply", tint = PrimaryText) }
@@ -607,7 +608,7 @@ private fun MessageBubble(
 
     Box(
         Modifier.fillMaxWidth()
-            .background(if (selected) Color(0x966E7477) else Color.Transparent)
+            .background(if (selected) Color(0xA88B9093) else Color.Transparent)
             .combinedClickable(
                 onClick = { if (selected) onClearSelection() },
                 onLongClick = onLongPress,
@@ -704,7 +705,7 @@ private fun MessageBubble(
             ReactionBar(
                 selectedReaction = message.reaction,
                 onReaction = onReaction,
-                modifier = Modifier.align(Alignment.TopCenter).offset(y = (-61).dp),
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = (-56).dp),
             )
         }
     }
@@ -740,28 +741,28 @@ private fun ReactionBar(
             .zIndex(8f)
             .scale(trayScale)
             .shadow(9.dp, RoundedCornerShape(32.dp), clip = false)
-            .width(344.dp)
-            .height(60.dp)
-            .clip(RoundedCornerShape(32.dp))
+            .width(336.dp)
+            .height(56.dp)
+            .clip(RoundedCornerShape(28.dp))
             .background(Color(0xFF20282B))
-            .padding(horizontal = 9.dp),
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         emojis.forEach { emoji ->
             val active = selectedReaction == emoji
             Box(
-                Modifier.size(44.dp)
+                Modifier.size(40.dp)
                     .clip(CircleShape)
                     .background(if (active) Color(0xFF3A4448) else Color.Transparent)
                     .clickable { onReaction(emoji) },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(emoji, fontSize = 29.sp)
+                Text(emoji, fontSize = 27.sp)
             }
         }
         Box(
-            Modifier.size(42.dp).clip(CircleShape).background(Color(0xFF75848C)).clickable { onReaction("😊") },
+            Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF75848C)).clickable { onReaction("😊") },
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Rounded.Add, "More reactions", tint = AppBackground, modifier = Modifier.size(28.dp))
