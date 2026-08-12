@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -97,6 +99,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -488,7 +492,7 @@ private fun MessageSelectionTopBar(
     onMore: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().background(ElevatedSurface).statusBarsPadding().height(64.dp).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().background(ElevatedSurface).statusBarsPadding().height(56.dp).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Close selection", tint = PrimaryText) }
@@ -603,7 +607,7 @@ private fun MessageBubble(
 
     Box(
         Modifier.fillMaxWidth()
-            .background(if (selected) Color(0x558B9093) else Color.Transparent)
+            .background(if (selected) Color(0x966E7477) else Color.Transparent)
             .combinedClickable(
                 onClick = { if (selected) onClearSelection() },
                 onLongClick = onLongPress,
@@ -697,7 +701,11 @@ private fun MessageBubble(
             }
         }
         if (selected) {
-            ReactionBar(onReaction, Modifier.align(Alignment.TopCenter).offset(y = (-56).dp))
+            ReactionBar(
+                selectedReaction = message.reaction,
+                onReaction = onReaction,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = (-61).dp),
+            )
         }
     }
 }
@@ -714,17 +722,49 @@ private fun ReplyQuote(sender: String, body: String) {
 }
 
 @Composable
-private fun ReactionBar(onReaction: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun ReactionBar(
+    selectedReaction: String?,
+    onReaction: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
+    val trayScale by animateFloatAsState(
+        targetValue = if (appeared) 1f else .86f,
+        animationSpec = spring(dampingRatio = .72f, stiffness = 480f),
+        label = "reactionTrayScale",
+    )
+    val emojis = listOf("👍", "❤️", "😂", "😮", "😢", "🙏", "🫡")
     Row(
-        modifier.zIndex(8f).clip(RoundedCornerShape(30.dp)).background(ComponentSurface).padding(horizontal = 8.dp, vertical = 5.dp),
+        modifier
+            .zIndex(8f)
+            .scale(trayScale)
+            .shadow(9.dp, RoundedCornerShape(32.dp), clip = false)
+            .width(344.dp)
+            .height(60.dp)
+            .clip(RoundedCornerShape(32.dp))
+            .background(Color(0xFF20282B))
+            .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        listOf("👍", "❤️", "😂", "😮", "😢", "🙏", "🫡").forEach { emoji ->
-            Text(emoji, fontSize = 24.sp, modifier = Modifier.clickable { onReaction(emoji) }.padding(2.dp))
+        emojis.forEach { emoji ->
+            val active = selectedReaction == emoji
+            Box(
+                Modifier.size(44.dp)
+                    .clip(CircleShape)
+                    .background(if (active) Color(0xFF3A4448) else Color.Transparent)
+                    .clickable { onReaction(emoji) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(emoji, fontSize = 29.sp)
+            }
         }
-        Box(Modifier.size(34.dp).clip(CircleShape).background(SecondaryText).clickable { onReaction("😊") }, contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Add, "More reactions", tint = AppBackground)
+        Box(
+            Modifier.size(42.dp).clip(CircleShape).background(Color(0xFF75848C)).clickable { onReaction("😊") },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Rounded.Add, "More reactions", tint = AppBackground, modifier = Modifier.size(28.dp))
         }
     }
 }
