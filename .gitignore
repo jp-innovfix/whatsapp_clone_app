@@ -8,3 +8,16 @@ build/
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Firebase local state and credentials/configuration
+.firebaserc
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+backend/**/node_modules/
+backend/**/lib/
+backend/**/.env
+backend/**/.env.*
+!backend/**/.env.example
+app/google-services.json
+service-account*.json

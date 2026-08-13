@@ -35,6 +35,8 @@ import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.Done
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.MoreVert
@@ -42,6 +44,7 @@ import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.Update
 import androidx.compose.material3.Badge
@@ -332,7 +335,12 @@ fun ChatRow(
                 when {
                     thread.draft -> Text("Draft: ", color = BrandGreen, style = MaterialTheme.typography.bodyMedium)
                     thread.mediaLabel != null -> Icon(Icons.Rounded.Image, null, tint = SecondaryText, modifier = Modifier.size(17.dp))
-                    thread.preview.startsWith("You") -> Icon(Icons.Rounded.DoneAll, null, tint = ReadBlue, modifier = Modifier.size(18.dp))
+                    thread.lastMessageOutgoing -> Icon(
+                        Icons.Rounded.Done,
+                        contentDescription = "Sent",
+                        tint = SecondaryText,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
                 if (thread.mediaLabel != null) Spacer(Modifier.width(4.dp))
                 Text(
@@ -413,7 +421,7 @@ private fun RowScope.NavigationItem(
                     modifier = Modifier.align(Alignment.TopEnd),
                     containerColor = BrandGreen,
                     contentColor = AppBackground,
-                ) { Text("99+", fontSize = 9.sp) }
+                ) { Text(if (badge > 99) "99+" else badge.toString(), fontSize = 9.sp) }
             }
         }
         Spacer(Modifier.height(4.dp))
@@ -480,7 +488,7 @@ fun DarkFloatingButton(
 
 @Composable
 fun DoodleBackground(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.fillMaxSize().background(Color(0xFF0D1518))) {
+    Canvas(modifier = modifier.fillMaxSize().background(Color(0xFF0A1014))) {
         val color = Color(0xFF202D31)
         val stroke = .75.dp.toPx()
         val stepX = size.width / 12f
@@ -532,6 +540,7 @@ fun VoiceWaveform(
     modifier: Modifier = Modifier,
     playedColor: Color = ReadBlue,
     remainingColor: Color = SecondaryText,
+    showThumb: Boolean = false,
 ) {
     Canvas(modifier = modifier) {
         val bars = 38
@@ -549,16 +558,35 @@ fun VoiceWaveform(
                 cap = StrokeCap.Round,
             )
         }
+        if (showThumb) {
+            val thumbX = size.width * progress.coerceIn(0f, 1f)
+            drawCircle(
+                color = playedColor,
+                radius = 5.5.dp.toPx(),
+                center = Offset(thumbX.coerceIn(5.5.dp.toPx(), size.width - 5.5.dp.toPx()), size.height / 2f),
+            )
+        }
     }
 }
 
 @Composable
 fun DeliveryIcon(status: DeliveryStatus, modifier: Modifier = Modifier) {
     if (status == DeliveryStatus.None) return
+    val icon = when (status) {
+        DeliveryStatus.Pending -> Icons.Rounded.Schedule
+        DeliveryStatus.Sent -> Icons.Rounded.Check
+        DeliveryStatus.Delivered, DeliveryStatus.Read -> Icons.Rounded.DoneAll
+        DeliveryStatus.Failed -> Icons.Rounded.ErrorOutline
+        DeliveryStatus.None -> return
+    }
     Icon(
-        imageVector = if (status == DeliveryStatus.Sent) Icons.Rounded.Check else Icons.Rounded.DoneAll,
+        imageVector = icon,
         contentDescription = status.name,
-        tint = if (status == DeliveryStatus.Read) ReadBlue else SecondaryText,
+        tint = when (status) {
+            DeliveryStatus.Read -> ReadBlue
+            DeliveryStatus.Failed -> Color(0xFFFF6B6B)
+            else -> SecondaryText
+        },
         modifier = modifier.size(17.dp),
     )
 }

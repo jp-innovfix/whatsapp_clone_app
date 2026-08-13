@@ -107,7 +107,6 @@ import com.jp.whatsappclone.ui.ElevatedSurface
 import com.jp.whatsappclone.ui.PrimaryText
 import com.jp.whatsappclone.ui.SecondaryText
 import com.jp.whatsappclone.ui.components.AppTopBar
-import com.jp.whatsappclone.ui.components.ArchivedRow
 import com.jp.whatsappclone.ui.components.Avatar
 import com.jp.whatsappclone.ui.components.ChatRow
 import com.jp.whatsappclone.ui.components.DarkFloatingButton
@@ -122,9 +121,11 @@ fun MainScreen(
     state: AppState,
     dispatch: (AppAction) -> Unit,
     onOpenChat: (String) -> Unit,
+    onOpenContact: (ContactUi) -> Unit = {},
     onSearch: () -> Unit,
     onContactPicker: () -> Unit,
     onNotifications: () -> Unit,
+    onNewGroup: () -> Unit = {},
     showMessage: (String) -> Unit,
     initialPreviewContactId: String? = null,
     initialOverflowMenu: Boolean = false,
@@ -140,7 +141,9 @@ fun MainScreen(
             WhatsAppBottomNavigation(
                 selected = state.selectedTab,
                 unreadCount = state.chats.sumOf { it.unreadCount },
-                onSelect = { dispatch(AppAction.SelectTab(it)) },
+                onSelect = { tab ->
+                    dispatch(AppAction.SelectTab(tab))
+                },
             )
         },
     ) { padding ->
@@ -148,21 +151,20 @@ fun MainScreen(
             when (state.selectedTab) {
                 MainTab.Chats -> ChatsScreen(
                     state = state,
+                    dispatch = dispatch,
                     onSearch = onSearch,
                     onChat = onOpenChat,
                     onAvatar = { previewContact = it },
                     onContactPicker = onContactPicker,
                     onNotifications = onNotifications,
+                    onNewGroup = onNewGroup,
                     onFilter = { dispatch(AppAction.ToggleSearchFilter(it)) },
                     showMessage = showMessage,
                     initialOverflowMenu = initialOverflowMenu,
                 )
                 MainTab.Calls -> CallsScreen(
                     state = state,
-                    onCall = { contact, video ->
-                        dispatch(AppAction.StartCall(contact.id, video))
-                        showMessage(if (video) "Mock video call started" else "Mock call started")
-                    },
+                    onCall = { _, _ -> showMessage(V1_UNAVAILABLE_MESSAGE) },
                     showMessage = showMessage,
                 )
                 MainTab.Updates -> UpdatesScreen(state, showMessage)
@@ -182,7 +184,7 @@ fun MainScreen(
             onMessage = {
                 previewContact = null
                 state.chats.firstOrNull { it.contact.id == contact.id }?.let { onOpenChat(it.id) }
-                    ?: showMessage("New mock conversation")
+                    ?: onOpenContact(contact)
             },
             onAction = showMessage,
         )
@@ -192,11 +194,13 @@ fun MainScreen(
 @Composable
 private fun ChatsScreen(
     state: AppState,
+    dispatch: (AppAction) -> Unit,
     onSearch: () -> Unit,
     onChat: (String) -> Unit,
     onAvatar: (ContactUi) -> Unit,
     onContactPicker: () -> Unit,
     onNotifications: () -> Unit,
+    onNewGroup: () -> Unit,
     onFilter: (String) -> Unit,
     showMessage: (String) -> Unit,
     initialOverflowMenu: Boolean,
@@ -211,15 +215,28 @@ private fun ChatsScreen(
                     ChatSelectionTopBar(
                         onBack = { selectedChatId = null },
                         onAction = { action ->
-                            showMessage("$action is a mock chat action")
-                            if (action != "More") selectedChatId = null
+                            val selected = state.chats.firstOrNull { it.id == selectedChatId }
+                            when {
+                                selected == null -> Unit
+                                action == "Pin" -> dispatch(
+                                    AppAction.SetConversationPinned(selected.id, !selected.pinned),
+                                )
+                                action == "Mute" -> dispatch(
+                                    AppAction.SetConversationMuted(selected.id, !selected.muted),
+                                )
+                                action == "Archive" -> dispatch(
+                                    AppAction.SetConversationArchived(selected.id, !selected.archived),
+                                )
+                                else -> showMessage(V1_UNAVAILABLE_MESSAGE)
+                            }
+                            selectedChatId = null
                         },
                     )
                 } else {
                     AppTopBar(
-                        title = "WhatsApp",
+                        title = "INNOVFIX",
                         brand = true,
-                        onCamera = { showMessage("Camera is mocked in this UI prototype") },
+                        onCamera = { showMessage(V1_UNAVAILABLE_MESSAGE) },
                         onMore = {
                             filtersVisible = true
                             overflow = true
@@ -239,7 +256,7 @@ private fun ChatsScreen(
                             text = { Text(label, color = PrimaryText, style = MaterialTheme.typography.bodyLarge) },
                             onClick = {
                                 overflow = false
-                                showMessage("$label is a mock action")
+                                if (label == "New group") onNewGroup() else showMessage("$label is not included in this version")
                             },
                         )
                     }
@@ -263,7 +280,7 @@ private fun ChatsScreen(
             if (filtersVisible) {
                 Spacer(Modifier.height(28.dp))
                 FilterChipRow(
-                    filters = listOf("Hi ma", "Bang meet", "Work", "Unread"),
+                    filters = listOf("Unread", "Favourites", "Groups"),
                     selected = state.searchFilters,
                     onFilter = onFilter,
                     modifier = Modifier.padding(start = 12.dp),
@@ -273,7 +290,39 @@ private fun ChatsScreen(
                 Spacer(Modifier.height(20.dp))
             }
             LazyColumn(Modifier.fillMaxSize()) {
-                item { ArchivedRow(count = 28) }
+                if (state.showArchived) {
+                    item(key = "archived_header") {
+                        Row(
+                            Modifier.fillMaxWidth().height(58.dp).clickable { dispatch(AppAction.ToggleArchivedView) }
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IconButton(onClick = { dispatch(AppAction.ToggleArchivedView) }) {
+                                Icon(Icons.Rounded.ArrowBack, "Back to chats", tint = PrimaryText)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Archived",
+                                color = PrimaryText,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                    }
+                }
+                if (!state.showArchived && state.chats.any { it.archived }) {
+                    item(key = "archived") {
+                        Row(
+                            Modifier.fillMaxWidth().height(58.dp).clickable { dispatch(AppAction.ToggleArchivedView) }
+                                .padding(horizontal = 24.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Rounded.Archive, "Archived", tint = SecondaryText)
+                            Spacer(Modifier.width(24.dp))
+                            Text("Archived", color = PrimaryText, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            Text(state.chats.count { it.archived }.toString(), color = SecondaryText)
+                        }
+                    }
+                }
                 items(state.filteredHomeChats(), key = { it.id }) { thread ->
                     ChatRow(
                         thread = thread,
@@ -331,17 +380,17 @@ private fun CallsScreen(
         Column(Modifier.fillMaxSize()) {
             AppTopBar(
                 "Calls",
-                onCamera = { showMessage("Camera is mocked") },
-                onSearch = { showMessage("Call search is mocked") },
-                onMore = { showMessage("Call settings are mocked") },
+                onCamera = { showMessage(V1_UNAVAILABLE_MESSAGE) },
+                onSearch = { showMessage(V1_UNAVAILABLE_MESSAGE) },
+                onMore = { showMessage(V1_UNAVAILABLE_MESSAGE) },
             )
             LazyRow(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                item { CallShortcut(Icons.Outlined.Call, "Call") { showMessage("Choose a contact to call") } }
-                item { CallShortcut(Icons.Rounded.CalendarMonth, "Schedule") { showMessage("Call scheduled") } }
-                item { CallShortcut(Icons.Rounded.Dialpad, "Keypad") { showMessage("Keypad is mocked") } }
+                item { CallShortcut(Icons.Outlined.Call, "Call") { showMessage(V1_UNAVAILABLE_MESSAGE) } }
+                item { CallShortcut(Icons.Rounded.CalendarMonth, "Schedule") { showMessage(V1_UNAVAILABLE_MESSAGE) } }
+                item { CallShortcut(Icons.Rounded.Dialpad, "Keypad") { showMessage(V1_UNAVAILABLE_MESSAGE) } }
                 items(state.contacts.take(3)) { contact ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Avatar(contact, modifier = Modifier.clickable { onCall(contact, false) }, size = 56.dp)
@@ -349,7 +398,7 @@ private fun CallsScreen(
                         Text(contact.name.substringBefore(' '), color = SecondaryText, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
-                item { CallShortcut(Icons.Rounded.FavoriteBorder, "Favourites") { showMessage("Favourites selected") } }
+                item { CallShortcut(Icons.Rounded.FavoriteBorder, "Favourites") { showMessage(V1_UNAVAILABLE_MESSAGE) } }
             }
             Text(
                 "Recent",
@@ -365,7 +414,7 @@ private fun CallsScreen(
         LightFloatingButton(
             Icons.Rounded.Phone,
             "Add call",
-            { showMessage("Choose a contact for a new call") },
+            { showMessage(V1_UNAVAILABLE_MESSAGE) },
             Modifier.align(Alignment.BottomEnd).padding(16.dp),
             showAddMark = true,
             addMarkColor = AppBackground,
@@ -428,9 +477,9 @@ private fun UpdatesScreen(state: AppState, showMessage: (String) -> Unit) {
             item {
                 AppTopBar(
                     "Updates",
-                    onCamera = { showMessage("Status camera is mocked") },
-                    onSearch = { showMessage("Update search is mocked") },
-                    onMore = { showMessage("Update options are mocked") },
+                    onCamera = { showMessage(V1_UNAVAILABLE_MESSAGE) },
+                    onSearch = { showMessage(V1_UNAVAILABLE_MESSAGE) },
+                    onMore = { showMessage(V1_UNAVAILABLE_MESSAGE) },
                 )
             }
             item {
@@ -439,11 +488,11 @@ private fun UpdatesScreen(state: AppState, showMessage: (String) -> Unit) {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(state.statuses, key = { it.id }) { status -> StatusCard(status) { showMessage("${status.contact.name} status viewer is mocked") } }
+                    items(state.statuses, key = { it.id }) { status -> StatusCard(status) { showMessage(V1_UNAVAILABLE_MESSAGE) } }
                 }
                 Box(
                     Modifier.padding(horizontal = 20.dp, vertical = 16.dp).fillMaxWidth().height(38.dp).clip(RoundedCornerShape(20.dp))
-                        .border(1.dp, Color(0xFF485158), RoundedCornerShape(24.dp)).clickable { showMessage("Status boost is mocked") },
+                        .border(1.dp, Color(0xFF485158), RoundedCornerShape(24.dp)).clickable { showMessage(V1_UNAVAILABLE_MESSAGE) },
                 contentAlignment = Alignment.Center,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -457,12 +506,12 @@ private fun UpdatesScreen(state: AppState, showMessage: (String) -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Channels", color = PrimaryText, style = MaterialTheme.typography.headlineMedium)
                     Spacer(Modifier.weight(1f))
-                    Box(Modifier.clip(RoundedCornerShape(22.dp)).background(ComponentSurface).clickable { showMessage("Explore channels") }.padding(horizontal = 18.dp, vertical = 7.dp)) {
+                    Box(Modifier.clip(RoundedCornerShape(22.dp)).background(ComponentSurface).clickable { showMessage(V1_UNAVAILABLE_MESSAGE) }.padding(horizontal = 18.dp, vertical = 7.dp)) {
                         Text("Explore", color = PrimaryText, style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
-            items(state.channels, key = { it.id }) { channel -> ChannelRow(channel) { showMessage("${channel.name} is a mock channel") } }
+            items(state.channels, key = { it.id }) { channel -> ChannelRow(channel) { showMessage(V1_UNAVAILABLE_MESSAGE) } }
             item { Spacer(Modifier.height(96.dp)) }
         }
         Column(
@@ -470,11 +519,11 @@ private fun UpdatesScreen(state: AppState, showMessage: (String) -> Unit) {
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            DarkFloatingButton(Icons.Rounded.Edit, "Create text status", { showMessage("Text status composer is mocked") })
+            DarkFloatingButton(Icons.Rounded.Edit, "Create text status", { showMessage(V1_UNAVAILABLE_MESSAGE) })
             LightFloatingButton(
                 Icons.Rounded.CameraAlt,
                 "Create status",
-                { showMessage("Status camera is mocked") },
+                { showMessage(V1_UNAVAILABLE_MESSAGE) },
                 showAddMark = true,
                 addMarkColor = AppBackground,
                 addMarkOffsetX = 9.dp,
@@ -555,7 +604,7 @@ private fun ToolsScreen(
 ) {
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = startIndex)
     LazyColumn(Modifier.fillMaxSize().background(AppBackground), state = listState) {
-        stickyHeader { AppTopBar("Tools", onCamera = { showMessage("Camera is mocked") }, onMore = { showMessage("Tool options are mocked") }) }
+        stickyHeader { AppTopBar("Tools", onCamera = { showMessage(V1_UNAVAILABLE_MESSAGE) }, onMore = { showMessage(V1_UNAVAILABLE_MESSAGE) }) }
         item {
             Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Last 7 days performance", color = SecondaryText, style = MaterialTheme.typography.bodyLarge)
@@ -569,7 +618,7 @@ private fun ToolsScreen(
             ) {
                 items(state.metrics) { metric ->
                     Card(
-                        Modifier.width(105.dp).height(102.dp).clickable { showMessage("${metric.label.replace("\n", " ")} details") },
+                        Modifier.width(105.dp).height(102.dp).clickable { showMessage(V1_UNAVAILABLE_MESSAGE) },
                         colors = CardDefaults.cardColors(containerColor = AppBackground),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF30383D)),
                         shape = RoundedCornerShape(16.dp),
@@ -600,7 +649,7 @@ private fun ToolsScreen(
                             Text("Draft Ad", color = PrimaryText, style = MaterialTheme.typography.titleMedium)
                             Text("We’ve saved your ad progress so you can finish creating it.", color = SecondaryText, style = MaterialTheme.typography.bodyMedium)
                             Spacer(Modifier.height(10.dp))
-                            Box(Modifier.clip(RoundedCornerShape(24.dp)).background(ActionWhite).clickable { showMessage("Ad creation is mocked") }.padding(horizontal = 18.dp, vertical = 9.dp)) {
+                            Box(Modifier.clip(RoundedCornerShape(24.dp)).background(ActionWhite).clickable { showMessage(V1_UNAVAILABLE_MESSAGE) }.padding(horizontal = 18.dp, vertical = 9.dp)) {
                                 Text("Continue creating ad", color = AppBackground, style = MaterialTheme.typography.labelLarge)
                             }
                         }
@@ -616,7 +665,7 @@ private fun ToolsScreen(
                 6 -> ToolSectionTitle("Organise your chats")
                 10 -> ToolSectionTitle("Manage your account")
             }
-            ToolRow(item) { showMessage("${item.title} is a mock business tool") }
+            ToolRow(item) { showMessage(V1_UNAVAILABLE_MESSAGE) }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
@@ -676,10 +725,12 @@ private fun ContactPreviewDialog(
             }
             Row(Modifier.fillMaxWidth().height(46.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onMessage) { Icon(Icons.Rounded.Chat, "Message", tint = PrimaryText) }
-                IconButton(onClick = { onAction("Mock voice call") }) { Icon(Icons.Rounded.Phone, "Voice call", tint = PrimaryText) }
-                IconButton(onClick = { onAction("Mock video call") }) { Icon(Icons.Rounded.VideoCall, "Video call", tint = PrimaryText) }
-                IconButton(onClick = { onAction("Contact info is mocked") }) { Icon(Icons.Rounded.Info, "Info", tint = PrimaryText) }
+                IconButton(onClick = { onAction(V1_UNAVAILABLE_MESSAGE) }) { Icon(Icons.Rounded.Phone, "Voice call", tint = PrimaryText) }
+                IconButton(onClick = { onAction(V1_UNAVAILABLE_MESSAGE) }) { Icon(Icons.Rounded.VideoCall, "Video call", tint = PrimaryText) }
+                IconButton(onClick = { onAction(V1_UNAVAILABLE_MESSAGE) }) { Icon(Icons.Rounded.Info, "Info", tint = PrimaryText) }
             }
         }
     }
 }
+
+private const val V1_UNAVAILABLE_MESSAGE = "Not available in this version"

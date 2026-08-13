@@ -8,9 +8,12 @@ import kotlinx.coroutines.flow.update
 class MockBusinessRepository {
     private val _appState = MutableStateFlow(seedState())
     val appState: StateFlow<AppState> = _appState.asStateFlow()
+    private val threadMessages = seedMessages()
 
     private var nextMessageId = 100
     private var nextCallId = 100
+
+    fun messages(threadId: String): List<MessageUi> = threadMessages[threadId].orEmpty().toList()
 
     fun dispatch(action: AppAction) {
         when (action) {
@@ -37,6 +40,7 @@ class MockBusinessRepository {
                         body = text,
                         time = "3:36 am",
                         status = DeliveryStatus.Sent,
+                        replyToMessageId = action.replyToMessageId,
                         replyToSender = action.replyToSender,
                         replyToBody = action.replyToBody,
                     ),
@@ -67,11 +71,43 @@ class MockBusinessRepository {
                 )
                 _appState.update { it.copy(recording = RecordingUi()) }
             }
+            is AppAction.SendAttachment -> appendMessage(
+                action.threadId,
+                MessageUi(
+                    id = "m${nextMessageId++}",
+                    direction = MessageDirection.Outgoing,
+                    body = action.fileName,
+                    time = "3:36 am",
+                    status = DeliveryStatus.Sent,
+                    kind = action.kind,
+                    fileName = action.fileName,
+                    mimeType = action.mimeType,
+                    sizeBytes = action.sizeBytes,
+                    durationMillis = action.durationMillis,
+                    audioPath = action.sourceUri.takeIf { action.kind == com.jp.whatsappclone.data.domain.MessageKind.AUDIO },
+                    voiceSeconds = action.durationMillis?.div(1_000)?.toInt(),
+                ),
+            )
             is AppAction.SetMessageReaction -> updateMessage(action.threadId, action.messageId) {
-                it.copy(reaction = action.reaction)
+                it.copy(
+                    ownReaction = action.reaction,
+                    reactionSummaries = action.reaction
+                        ?.let { emoji -> listOf(ReactionSummaryUi(emoji = emoji, count = 1)) }
+                        .orEmpty(),
+                )
             }
             is AppAction.DeleteMessage -> updateMessage(action.threadId, action.messageId) {
-                it.copy(body = "", deleted = true, voiceSeconds = null, audioPath = null, reaction = null)
+                it.copy(
+                    body = "",
+                    deleted = true,
+                    voiceSeconds = null,
+                    audioPath = null,
+                    ownReaction = null,
+                    reactionSummaries = emptyList(),
+                )
+            }
+            is AppAction.RetryMessage -> updateMessage(action.threadId, action.messageId) {
+                it.copy(status = DeliveryStatus.Sent, failureReason = null)
             }
             AppAction.DismissDraftAd -> _appState.update { it.copy(draftAdVisible = false) }
             AppAction.ToggleMessageMute -> _appState.update {
@@ -80,6 +116,22 @@ class MockBusinessRepository {
             AppAction.ToggleStatusMute -> _appState.update {
                 it.copy(statusNotificationsMuted = !it.statusNotificationsMuted)
             }
+            is AppAction.SetConversationMuted -> _appState.update { state ->
+                state.copy(chats = state.chats.map { chat ->
+                    if (chat.id == action.conversationId) chat.copy(muted = action.muted) else chat
+                })
+            }
+            is AppAction.SetConversationPinned -> _appState.update { state ->
+                state.copy(chats = state.chats.map { chat ->
+                    if (chat.id == action.conversationId) chat.copy(pinned = action.pinned) else chat
+                })
+            }
+            is AppAction.SetConversationArchived -> _appState.update { state ->
+                state.copy(chats = state.chats.map { chat ->
+                    if (chat.id == action.conversationId) chat.copy(archived = action.archived) else chat
+                })
+            }
+            AppAction.ToggleArchivedView -> _appState.update { it.copy(showArchived = !it.showArchived) }
             is AppAction.StartCall -> _appState.update { state ->
                 val contact = state.contacts.firstOrNull { it.id == action.contactId } ?: return@update state
                 state.copy(
@@ -98,27 +150,64 @@ class MockBusinessRepository {
     }
 
     private fun appendMessage(threadId: String, message: MessageUi) {
+        threadMessages.getOrPut(threadId) { mutableListOf() }.add(message)
         _appState.update { state ->
             state.copy(chats = state.chats.map { thread ->
                 if (thread.id == threadId) {
                     val preview = if (message.voiceSeconds != null) "Voice message" else message.body
-                    thread.copy(messages = thread.messages + message, preview = preview, time = message.time)
+                    thread.copy(preview = preview, time = message.time)
                 } else thread
             })
         }
     }
 
     private fun updateMessage(threadId: String, messageId: String, transform: (MessageUi) -> MessageUi) {
-        _appState.update { state ->
-            state.copy(chats = state.chats.map { thread ->
-                if (thread.id == threadId) {
-                    thread.copy(messages = thread.messages.map { message ->
-                        if (message.id == messageId) transform(message) else message
-                    })
-                } else thread
-            })
+        val messages = threadMessages[threadId] ?: return
+        val index = messages.indexOfFirst { it.id == messageId }
+        if (index >= 0) {
+            messages[index] = transform(messages[index])
         }
     }
+
+    private fun seedMessages(): MutableMap<String, MutableList<MessageUi>> = mutableMapOf(
+        "chat_mia" to mutableListOf(
+            MessageUi("m1", MessageDirection.Outgoing, "Reimbursement", "12:09 am", DeliveryStatus.Read),
+            MessageUi("m2", MessageDirection.Incoming, "", "12:09 am", voiceSeconds = 15),
+            MessageUi("m3", MessageDirection.Incoming, "Could you send the updated ID card? 🌚", "12:10 am"),
+            MessageUi("m4", MessageDirection.Outgoing, "", "12:11 am", DeliveryStatus.Read, voiceSeconds = 13),
+            MessageUi(
+                "m5",
+                MessageDirection.Incoming,
+                "I need it today 🌚",
+                "12:11 am",
+                ownReaction = "❤️",
+                reactionSummaries = listOf(ReactionSummaryUi(emoji = "❤️", count = 1)),
+            ),
+            MessageUi("m6", MessageDirection.Outgoing, "Try to get that", "12:12 am", DeliveryStatus.Read),
+            MessageUi("m7", MessageDirection.Outgoing, "If you are good", "12:12 am", DeliveryStatus.Read),
+            MessageUi("m8", MessageDirection.Outgoing, "Then you will", "12:12 am", DeliveryStatus.Read),
+            MessageUi("m9", MessageDirection.Incoming, "Okay 🙂", "12:12 am"),
+            MessageUi("m10", MessageDirection.Outgoing, time = "1:44 am", status = DeliveryStatus.Read, deleted = true),
+        ),
+        "chat_team" to mutableListOf(
+            MessageUi(
+                "g1",
+                MessageDirection.Incoming,
+                "Please make sure the content is concise, professional, and ready for the client review.",
+                "11:42 am",
+                senderName = "Dev Product Lead",
+            ),
+            MessageUi("g2", MessageDirection.Outgoing, "Sure, I will update it today.", "11:46 am", DeliveryStatus.Read),
+            MessageUi(
+                "g3",
+                MessageDirection.Incoming,
+                "The visual direction looks good. Let’s keep the same spacing across every screen.",
+                "11:51 am",
+                senderName = "Reena Creative",
+            ),
+            MessageUi("g4", MessageDirection.Incoming, "Okay, I will check the final build.", "12:01 pm", senderName = "Akshara"),
+        ),
+    )
 
     private fun seedState(): AppState {
         val mia = ContactUi("mia", "Mia Kapoor", "MK", 0xFF66475EL, "last seen yesterday at 9:14 pm")
@@ -163,41 +252,11 @@ class MockBusinessRepository {
             GroupMemberUi("team", kiran, about = kiran.subtitle),
         )
 
-        val miaMessages = listOf(
-            MessageUi("m1", MessageDirection.Outgoing, "Reimbursement", "12:09 am", DeliveryStatus.Read),
-            MessageUi("m2", MessageDirection.Incoming, "", "12:09 am", voiceSeconds = 15),
-            MessageUi("m3", MessageDirection.Incoming, "Could you send the updated ID card? 🌚", "12:10 am"),
-            MessageUi("m4", MessageDirection.Outgoing, "", "12:11 am", DeliveryStatus.Read, voiceSeconds = 13),
-            MessageUi("m5", MessageDirection.Incoming, "I need it today 🌚", "12:11 am", reaction = "❤️"),
-            MessageUi("m6", MessageDirection.Outgoing, "Try to get that", "12:12 am", DeliveryStatus.Read),
-            MessageUi("m7", MessageDirection.Outgoing, "If you are good", "12:12 am", DeliveryStatus.Read),
-            MessageUi("m8", MessageDirection.Outgoing, "Then you will", "12:12 am", DeliveryStatus.Read),
-            MessageUi("m9", MessageDirection.Incoming, "Okay 🙂", "12:12 am"),
-        )
-        val teamMessages = listOf(
-            MessageUi(
-                "g1",
-                MessageDirection.Incoming,
-                "Please make sure the content is concise, professional, and ready for the client review.",
-                "11:42 am",
-                senderName = "Dev Product Lead",
-            ),
-            MessageUi("g2", MessageDirection.Outgoing, "Sure, I will update it today.", "11:46 am", DeliveryStatus.Read),
-            MessageUi(
-                "g3",
-                MessageDirection.Incoming,
-                "The visual direction looks good. Let’s keep the same spacing across every screen.",
-                "11:51 am",
-                senderName = "Reena Creative",
-            ),
-            MessageUi("g4", MessageDirection.Incoming, "Okay, I will check the final build.", "12:01 pm", senderName = "Akshara"),
-        )
         val chats = listOf(
-            ChatThreadUi("chat_mia", mia, "You deleted this message", "1:44 am", messages = miaMessages +
-                MessageUi("m10", MessageDirection.Outgoing, time = "1:44 am", status = DeliveryStatus.Read, deleted = true)),
+            ChatThreadUi("chat_mia", mia, "You deleted this message", "1:44 am"),
             ChatThreadUi("chat_dev", dev, "You reacted 👍 to “Looks good, please try again”", "1:33 am", unreadCount = 3, pinned = true),
             ChatThreadUi("chat_sara", sara, "Okay 🙂", "12:12 am", unreadCount = 2),
-            ChatThreadUi("chat_team", team, "Akshara: Okay, I will check the final build", "12:01 pm", unreadCount = 18, muted = true, messages = teamMessages),
+            ChatThreadUi("chat_team", team, "Akshara: Okay, I will check the final build", "12:01 pm", unreadCount = 18, muted = true),
             ChatThreadUi("chat_own", own, "3 photos", "Yesterday", mediaLabel = "3 photos"),
             ChatThreadUi("chat_mona", mona, "😊", "Yesterday"),
             ChatThreadUi("chat_rohan", rohan, "Draft: invoice follow-up", "Sunday", draft = true),

@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -60,9 +61,14 @@ import com.jp.whatsappclone.ui.PrimaryText
 import com.jp.whatsappclone.ui.SecondaryText
 
 @Composable
-fun LoginScreen(onLogin: () -> Unit) {
+fun LoginScreen(
+    onLogin: (email: String, password: String) -> Unit,
+    loading: Boolean = false,
+    errorMessage: String? = null,
+    firebaseConfigured: Boolean = true,
+) {
     var email by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var submitted by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -72,7 +78,7 @@ fun LoginScreen(onLogin: () -> Unit) {
         submitted = true
         if (emailValid && passwordValid) {
             focusManager.clearFocus()
-            onLogin()
+            onLogin(email.trim(), password)
         }
     }
 
@@ -93,7 +99,7 @@ fun LoginScreen(onLogin: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         Text("Welcome back", color = PrimaryText, fontSize = 30.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text("Sign in to WhatsApp Business UI Clone", color = SecondaryText, style = MaterialTheme.typography.bodyLarge)
+        Text("Sign in to INNOVFIX Internal Messenger", color = SecondaryText, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(42.dp))
 
         LoginField(
@@ -137,15 +143,25 @@ fun LoginScreen(onLogin: () -> Unit) {
         }
 
         Box(
-            Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp)).background(BrandGreen)
-                .clickable(onClick = submit)
+            Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp))
+                .background(if (loading || !firebaseConfigured) BrandGreen.copy(alpha = .45f) else BrandGreen)
+                .clickable(enabled = !loading && firebaseConfigured, onClick = submit)
                 .semantics { contentDescription = "Log in" },
             contentAlignment = Alignment.Center,
         ) {
-            Text("Log in", color = AppBackground, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(if (loading) "Signing in…" else "Log in", color = AppBackground, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        }
+        errorMessage?.let {
+            Spacer(Modifier.height(14.dp))
+            Text(it, color = DestructiveRed, fontSize = 13.sp)
         }
         Spacer(Modifier.height(54.dp))
-        Text("Local UI prototype · no account or network required", color = SecondaryText, fontSize = 12.sp)
+        Text(
+            if (firebaseConfigured) "Administrator-invited employees only"
+            else "Firebase is not configured in this build. Add app/google-services.json.",
+            color = SecondaryText,
+            fontSize = 12.sp,
+        )
         Spacer(Modifier.height(18.dp))
     }
 }

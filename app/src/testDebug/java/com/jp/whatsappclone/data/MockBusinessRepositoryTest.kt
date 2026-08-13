@@ -9,14 +9,15 @@ class MockBusinessRepositoryTest {
 
     @Test
     fun seededGroupHasMembersAdminsAndNamedMessages() {
-        val state = MockBusinessRepository().appState.value
+        val repository = MockBusinessRepository()
+        val state = repository.appState.value
         val group = state.chats.first { it.id == "chat_team" }
         val members = state.groupMembers.filter { it.groupId == group.contact.id }
 
         assertTrue(group.contact.isGroup)
         assertTrue(members.size >= 10)
         assertTrue(members.any { it.contact.name == "You" && it.isAdmin })
-        assertTrue(group.messages.any { it.direction == MessageDirection.Incoming && it.senderName != null })
+        assertTrue(repository.messages(group.id).any { it.direction == MessageDirection.Incoming && it.senderName != null })
     }
     @Test
     fun seedDataIsDeterministic() {
@@ -32,25 +33,25 @@ class MockBusinessRepositoryTest {
     @Test
     fun textMessageIsTrimmedAndAppended() {
         val repository = MockBusinessRepository()
-        val before = repository.appState.value.chats.first { it.id == "chat_mia" }.messages.size
+        val before = repository.messages("chat_mia").size
 
         repository.dispatch(AppAction.SendText("chat_mia", "  Sent from test  "))
 
         val chat = repository.appState.value.chats.first { it.id == "chat_mia" }
-        assertEquals(before + 1, chat.messages.size)
-        assertEquals("Sent from test", chat.messages.last().body)
-        assertEquals(DeliveryStatus.Sent, chat.messages.last().status)
+        assertEquals(before + 1, repository.messages("chat_mia").size)
+        assertEquals("Sent from test", repository.messages("chat_mia").last().body)
+        assertEquals(DeliveryStatus.Sent, repository.messages("chat_mia").last().status)
         assertEquals("Sent from test", chat.preview)
     }
 
     @Test
     fun blankMessageIsIgnored() {
         val repository = MockBusinessRepository()
-        val before = repository.appState.value.chats.first().messages
+        val before = repository.messages("chat_mia")
 
         repository.dispatch(AppAction.SendText("chat_mia", "   "))
 
-        assertEquals(before, repository.appState.value.chats.first().messages)
+        assertEquals(before, repository.messages("chat_mia"))
     }
 
     @Test
@@ -69,26 +70,28 @@ class MockBusinessRepositoryTest {
 
         val state = repository.appState.value
         assertEquals(RecordingUi(), state.recording)
-        assertEquals(2, state.chats.first { it.id == "chat_mia" }.messages.last().voiceSeconds)
+        assertEquals(2, repository.messages("chat_mia").last().voiceSeconds)
     }
 
     @Test
     fun repliesReactionsDeletionAndAudioPathAreStored() {
         val repository = MockBusinessRepository()
         repository.dispatch(AppAction.SendText("chat_mia", "Reply sent", "Mia Kapoor", "Original message"))
-        val reply = repository.appState.value.chats.first { it.id == "chat_mia" }.messages.last()
+        val reply = repository.messages("chat_mia").last()
         assertEquals("Mia Kapoor", reply.replyToSender)
         assertEquals("Original message", reply.replyToBody)
 
         repository.dispatch(AppAction.SetMessageReaction("chat_mia", reply.id, "👍"))
-        assertEquals("👍", repository.appState.value.chats.first { it.id == "chat_mia" }.messages.last().reaction)
+        val reacted = repository.messages("chat_mia").last()
+        assertEquals("👍", reacted.ownReaction)
+        assertEquals(listOf(ReactionSummaryUi(emoji = "👍", count = 1)), reacted.reactionSummaries)
 
         repository.dispatch(AppAction.DeleteMessage("chat_mia", reply.id))
-        assertTrue(repository.appState.value.chats.first { it.id == "chat_mia" }.messages.last().deleted)
+        assertTrue(repository.messages("chat_mia").last().deleted)
 
         repository.dispatch(AppAction.StartRecording)
         repository.dispatch(AppAction.SendRecording("chat_mia", "C:/mock/voice.m4a", 7))
-        val voice = repository.appState.value.chats.first { it.id == "chat_mia" }.messages.last()
+        val voice = repository.messages("chat_mia").last()
         assertEquals(7, voice.voiceSeconds)
         assertEquals("C:/mock/voice.m4a", voice.audioPath)
     }
@@ -100,9 +103,10 @@ class MockBusinessRepositoryTest {
         assertTrue(repository.appState.value.filteredSearchChats().all { it.unreadCount > 0 })
 
         repository.dispatch(AppAction.ToggleSearchFilter("Unread"))
-        repository.dispatch(AppAction.ToggleSearchFilter("Photos"))
-        val photoResults = repository.appState.value.filteredSearchChats()
-        assertEquals(listOf("chat_own"), photoResults.map { it.id })
+        repository.dispatch(AppAction.ToggleSearchFilter("Groups"))
+        val groupResults = repository.appState.value.filteredSearchChats()
+        assertTrue(groupResults.isNotEmpty())
+        assertTrue(groupResults.all { it.contact.isGroup })
 
         repository.dispatch(AppAction.ToggleSearchFilter("All"))
         assertTrue(repository.appState.value.searchFilters.isEmpty())

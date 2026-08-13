@@ -1,6 +1,5 @@
 package com.jp.whatsappclone.ui.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,7 +27,6 @@ import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.AutoDelete
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.EnhancedEncryption
 import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Link
@@ -53,17 +50,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,24 +71,21 @@ import com.jp.whatsappclone.ui.DividerColor
 import com.jp.whatsappclone.ui.PrimaryText
 import com.jp.whatsappclone.ui.SecondaryText
 import com.jp.whatsappclone.ui.components.Avatar
-import com.jp.whatsappclone.ui.components.avatarDrawableFor
 
 @Composable
 fun GroupInfoScreen(
     threadId: String,
     state: AppState,
+    dispatch: (com.jp.whatsappclone.data.AppAction) -> Unit,
     onBack: () -> Unit,
     showMessage: (String) -> Unit,
 ) {
     val thread = state.chats.firstOrNull { it.id == threadId } ?: return
-    val members = state.groupMembers.filter { it.groupId == thread.contact.id }
+    val members = state.groupMembers.filter { it.groupId == thread.id }
     val listState = rememberLazyListState()
     val compactHeader by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 260 }
     }
-    var chatLocked by rememberSaveable { mutableStateOf(false) }
-    var translationEnabled by rememberSaveable { mutableStateOf(false) }
-
     Column(Modifier.fillMaxSize().background(AppBackground)) {
         GroupInfoTopBar(
             contact = thread.contact,
@@ -112,52 +101,60 @@ fun GroupInfoScreen(
             item {
                 GroupProfileHeader(
                     contact = thread.contact,
-                    memberCount = 58,
+                    memberCount = members.size,
                     onAction = showMessage,
                 )
             }
-            item { GroupMediaSection(state, showMessage) }
+            item { GroupMediaSection(showMessage) }
             item {
-                GroupInfoRow(Icons.Outlined.Storage, "Manage storage", "1.6 GB") { showMessage("Storage management is mocked") }
-                GroupInfoRow(Icons.Outlined.Notifications, "Notifications", "All") { showMessage("Group notifications are mocked") }
-                GroupInfoRow(Icons.Outlined.PhotoLibrary, "Media visibility", "Default (Yes)") { showMessage("Media visibility is mocked") }
-                GroupInfoRow(Icons.Outlined.DarkMode, "Chat theme", "System default") { showMessage("Group theme is mocked") }
+                GroupInfoRow(Icons.Outlined.Storage, "Manage storage", "Messages and media") { showMessage(V1_UNAVAILABLE_MESSAGE) }
+                GroupInfoRow(
+                    Icons.Outlined.Notifications,
+                    "Notifications",
+                    if (thread.muted) "Muted" else "All",
+                ) {
+                    dispatch(com.jp.whatsappclone.data.AppAction.SetConversationMuted(thread.id, !thread.muted))
+                }
+                GroupInfoRow(Icons.Outlined.PhotoLibrary, "Media visibility", "Default") { showMessage(V1_UNAVAILABLE_MESSAGE) }
+                GroupInfoRow(Icons.Outlined.DarkMode, "Chat theme", "System default") { showMessage(V1_UNAVAILABLE_MESSAGE) }
                 GroupDivider()
             }
             item {
-                GroupInfoRow(Icons.Outlined.EnhancedEncryption, "Encryption", "Messages and calls are end-to-end encrypted. Learn more") {
-                    showMessage("Encryption information")
+                GroupInfoRow(Icons.Outlined.Security, "Security", "Firebase Auth and Firestore rules protect access") {
+                    showMessage("Firebase transport and Storage security protect this chat")
                 }
-                GroupInfoRow(Icons.Outlined.AutoDelete, "Disappearing messages", "Off") { showMessage("Disappearing messages are mocked") }
+                GroupInfoRow(Icons.Outlined.AutoDelete, "Disappearing messages", "Off") { showMessage(V1_UNAVAILABLE_MESSAGE) }
                 GroupInfoRow(
                     icon = Icons.Outlined.Lock,
                     title = "Chat lock",
-                    subtitle = "Lock and hide this chat on this device.",
-                    switchValue = chatLocked,
-                    onSwitch = { chatLocked = it },
+                    subtitle = "Off",
+                    switchValue = false,
+                    onSwitch = { showMessage(V1_UNAVAILABLE_MESSAGE) },
+                    onClick = { showMessage(V1_UNAVAILABLE_MESSAGE) },
                 )
-                GroupInfoRow(Icons.Outlined.Security, "Advanced chat privacy", "Off") { showMessage("Advanced privacy is mocked") }
-                GroupInfoRow(Icons.Outlined.AdminPanelSettings, "Group permissions") { showMessage("Group permissions are mocked") }
+                GroupInfoRow(Icons.Outlined.Security, "Advanced chat privacy", "Off") { showMessage(V1_UNAVAILABLE_MESSAGE) }
+                GroupInfoRow(Icons.Outlined.AdminPanelSettings, "Group permissions") { showMessage(V1_UNAVAILABLE_MESSAGE) }
                 GroupInfoRow(
                     icon = Icons.Outlined.Language,
                     title = "Translate messages",
-                    switchValue = translationEnabled,
-                    onSwitch = { translationEnabled = it },
+                    switchValue = false,
+                    onSwitch = { showMessage(V1_UNAVAILABLE_MESSAGE) },
+                    onClick = { showMessage(V1_UNAVAILABLE_MESSAGE) },
                 )
                 GroupInfoRow(
                     icon = Icons.Outlined.GroupAdd,
                     title = "Create a similar group",
                     subtitle = "Start with the same members that you can add or remove.",
                     lightIcon = true,
-                ) { showMessage("Similar-group creation is mocked") }
+                ) { showMessage(V1_UNAVAILABLE_MESSAGE) }
             }
-            item { MemberSectionHeader(58) { showMessage("Member search is mocked") } }
+            item { MemberSectionHeader(members.size) { showMessage(V1_UNAVAILABLE_MESSAGE) } }
             item {
-                MemberActionRow(Icons.Outlined.GroupAdd, "Add members") { showMessage("Member picker is mocked") }
-                MemberActionRow(Icons.Outlined.Link, "Invite via link or QR code") { showMessage("Invite link is mocked") }
+                MemberActionRow(Icons.Outlined.GroupAdd, "Add members") { showMessage(V1_UNAVAILABLE_MESSAGE) }
+                MemberActionRow(Icons.Outlined.Link, "Invite via link or QR code") { showMessage(V1_UNAVAILABLE_MESSAGE) }
             }
             items(members, key = { it.contact.id }) { member ->
-                GroupMemberRow(member) { showMessage("${member.contact.name} profile is mocked") }
+                GroupMemberRow(member) { showMessage(V1_UNAVAILABLE_MESSAGE) }
             }
         }
     }
@@ -182,9 +179,9 @@ private fun GroupInfoTopBar(
         } else {
             Spacer(Modifier.weight(1f))
         }
-        IconButton(onClick = { onAction("Add to lists is mocked") }) { Icon(Icons.Outlined.AddPhotoAlternate, "Add to lists", tint = PrimaryText) }
-        IconButton(onClick = { onAction("Group QR is mocked") }) { Icon(Icons.Outlined.QrCode2, "Group QR", tint = PrimaryText) }
-        IconButton(onClick = { onAction("More group options are mocked") }) { Icon(Icons.Rounded.MoreVert, "More", tint = PrimaryText) }
+        IconButton(onClick = { onAction(V1_UNAVAILABLE_MESSAGE) }) { Icon(Icons.Outlined.AddPhotoAlternate, "Add to lists", tint = PrimaryText) }
+        IconButton(onClick = { onAction(V1_UNAVAILABLE_MESSAGE) }) { Icon(Icons.Outlined.QrCode2, "Group QR", tint = PrimaryText) }
+        IconButton(onClick = { onAction(V1_UNAVAILABLE_MESSAGE) }) { Icon(Icons.Rounded.MoreVert, "More", tint = PrimaryText) }
     }
 }
 
@@ -202,18 +199,18 @@ private fun GroupProfileHeader(contact: ContactUi, memberCount: Int, onAction: (
             "Add group description",
             color = BrandGreen,
             fontSize = 18.sp,
-            modifier = Modifier.clickable { onAction("Group description editor is mocked") }.padding(vertical = 15.dp),
+            modifier = Modifier.clickable { onAction(V1_UNAVAILABLE_MESSAGE) }.padding(vertical = 15.dp),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            GroupActionButton(Icons.Outlined.VoiceChat, "Voice chat") { onAction("Mock group voice chat started") }
-            GroupActionButton(Icons.Outlined.GroupAdd, "Add") { onAction("Member picker is mocked") }
-            GroupActionButton(Icons.Outlined.Search, "Search") { onAction("Group search is mocked") }
+            GroupActionButton(Icons.Outlined.VoiceChat, "Voice chat") { onAction(V1_UNAVAILABLE_MESSAGE) }
+            GroupActionButton(Icons.Outlined.GroupAdd, "Add") { onAction(V1_UNAVAILABLE_MESSAGE) }
+            GroupActionButton(Icons.Outlined.Search, "Search") { onAction(V1_UNAVAILABLE_MESSAGE) }
         }
         GroupInfoRow(
             icon = Icons.Outlined.AddPhotoAlternate,
             title = "Add to lists",
             modifier = Modifier.padding(top = 18.dp),
-        ) { onAction("Add to lists is mocked") }
+        ) { onAction(V1_UNAVAILABLE_MESSAGE) }
     }
 }
 
@@ -232,48 +229,17 @@ private fun GroupActionButton(icon: ImageVector, label: String, onClick: () -> U
 }
 
 @Composable
-private fun GroupMediaSection(state: AppState, onAction: (String) -> Unit) {
+private fun GroupMediaSection(onAction: (String) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().clickable { onAction("Media gallery is mocked") }.padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().clickable { onAction(V1_UNAVAILABLE_MESSAGE) }.padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Media, links, and docs", color = SecondaryText, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("1,043", color = SecondaryText, style = MaterialTheme.typography.bodyLarge)
+            Text("Not enabled", color = SecondaryText, style = MaterialTheme.typography.bodyLarge)
             Icon(Icons.Rounded.ChevronRight, null, tint = SecondaryText)
         }
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            items(state.contacts.filter { !it.isGroup }.take(5), key = { it.id }) { contact ->
-                MediaPreviewTile(contact)
-            }
-        }
-        Spacer(Modifier.height(18.dp))
         GroupDivider()
-    }
-}
-
-@Composable
-private fun MediaPreviewTile(contact: ContactUi) {
-    val drawable = avatarDrawableFor(contact)
-    Box(Modifier.size(width = 112.dp, height = 92.dp).clip(RoundedCornerShape(4.dp)).background(ComponentSurface)) {
-        if (drawable != null) {
-            Image(
-                painter = painterResource(drawable),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            Box(Modifier.fillMaxSize().background(Color(contact.color)), contentAlignment = Alignment.Center) {
-                Text(contact.initials, color = PrimaryText, fontSize = 24.sp)
-            }
-        }
-        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Color(0xA8000000)).padding(horizontal = 6.dp, vertical = 3.dp)) {
-            Text(if (contact.id.hashCode() % 2 == 0) "GIF" else "0:12", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        }
     }
 }
 
@@ -375,3 +341,5 @@ private fun GroupMemberRow(member: GroupMemberUi, onClick: () -> Unit) {
 private fun GroupDivider() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(DividerColor))
 }
+
+private const val V1_UNAVAILABLE_MESSAGE = "Not available in this version"

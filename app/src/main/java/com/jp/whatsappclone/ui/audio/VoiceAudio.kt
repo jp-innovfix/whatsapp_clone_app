@@ -4,7 +4,9 @@ import android.content.Context
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.media.PlaybackParams
 import android.media.ToneGenerator
+import android.net.Uri
 import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -23,15 +25,11 @@ class VoiceRecorder(private val context: Context) {
     private var outputFile: File? = null
 
     fun start(): Boolean = runCatching {
-        release()
+        cancel()
         val file = File(context.cacheDir, "voice_${System.currentTimeMillis()}.m4a")
-        val mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(context)
-        } else {
-            @Suppress("DEPRECATION")
-            MediaRecorder()
-        }
-        mediaRecorder.apply {
+        val instance = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context)
+        else @Suppress("DEPRECATION") MediaRecorder()
+        instance.apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -42,35 +40,29 @@ class VoiceRecorder(private val context: Context) {
             start()
         }
         outputFile = file
-        recorder = mediaRecorder
+        recorder = instance
     }.isSuccess
 
-    fun pause(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
-        return runCatching { recorder?.pause() }.isSuccess
-    }
+    fun pause(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+        runCatching { requireNotNull(recorder).pause() }.isSuccess
 
-    fun resume(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
-        return runCatching { recorder?.resume() }.isSuccess
-    }
+    fun resume(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+        runCatching { requireNotNull(recorder).resume() }.isSuccess
 
-    fun stop(keepFile: Boolean): String? {
+    fun stop(keepFile: Boolean): File? {
         val file = outputFile
         val stopped = runCatching { recorder?.stop() }.isSuccess
-        release()
+        releaseRecorder()
         if (!keepFile || !stopped || file == null || !file.exists() || file.length() == 0L) {
             file?.delete()
             return null
         }
-        return file.absolutePath
+        return file
     }
 
-    fun cancel() {
-        stop(keepFile = false)
-    }
+    fun cancel() { stop(false) }
 
-    private fun release() {
+    private fun releaseRecorder() {
         runCatching { recorder?.reset() }
         runCatching { recorder?.release() }
         recorder = null
@@ -78,75 +70,131 @@ class VoiceRecorder(private val context: Context) {
     }
 }
 
-class VoicePlaybackController {
-    var playingMessageId by mutableStateOf<String?>(null)
+class VoicePlaybackController(private val context: Context) {
+    var activeMessageId by mutableStateOf<String?>(null)
+        private set
+    var isPlaying by mutableStateOf(false)
         private set
     var progress by mutableFloatStateOf(0f)
         private set
+    var speed by mutableFloatStateOf(1f)
+        private set
 
-    private var mediaPlayer: MediaPlayer? = null
-    private var playbackJob: Job? = null
-    private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 45)
+    private var player: MediaPlayer? = null
+    private var progressJob: Job? = null
+    private var demoJob: Job? = null
+    private var demoElapsedMillis = 0f
+    private var demoDurationMillis = 0L
+    private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 35)
 
-    fun toggle(message: MessageUi, scope: CoroutineScope) {
-        if (playingMessageId == message.id) {
-            stop(resetProgress = false)
+    fun toggle(message: MessageUi, sourceUri: String, scope: CoroutineScope) {
+        if (activeMessageId == message.id && player != null) {
+            val current = player ?: return
+            if (current.isPlaying) {
+                current.pause()
+                isPlaying = false
+            } else {
+                current.start()
+                isPlaying = true
+                monitor(scope)
+            }
             return
         }
-        stop(resetProgress = true)
-        playingMessageId = message.id
-
-        val path = message.audioPath
-        if (path != null && File(path).exists()) {
-            runCatching {
-                MediaPlayer().also { player ->
-                    mediaPlayer = player
-                    player.setDataSource(path)
-                    player.prepare()
-                    player.setOnCompletionListener {
-                        playingMessageId = null
-                        progress = 1f
-                        it.release()
-                        mediaPlayer = null
-                    }
-                    player.start()
-                    playbackJob = scope.launch {
-                        while (isActive && player.isPlaying) {
-                            progress = if (player.duration > 0) player.currentPosition / player.duration.toFloat() else 0f
-                            delay(80)
-                        }
-                    }
+        if (activeMessageId == message.id && demoJob != null) {
+            isPlaying = !isPlaying
+            if (isPlaying) tone.startTone(ToneGenerator.TONE_PROP_ACK, 100)
+            return
+        }
+        stop()
+        activeMessageId = message.id
+        runCatching {
+            MediaPlayer().also { mediaPlayer ->
+                player = mediaPlayer
+                mediaPlayer.setDataSource(context, Uri.parse(sourceUri))
+                mediaPlayer.prepare()
+                applySpeed(mediaPlayer)
+                mediaPlayer.setOnCompletionListener {
+                    progress = 1f
+                    isPlaying = false
+                    activeMessageId = null
+                    it.release()
+                    player = null
                 }
-            }.onFailure { startDemoPlayback(message, scope) }
-        } else {
-            startDemoPlayback(message, scope)
-        }
-    }
-
-    private fun startDemoPlayback(message: MessageUi, scope: CoroutineScope) {
-        tone.startTone(ToneGenerator.TONE_PROP_ACK, 220)
-        val duration = ((message.voiceSeconds ?: 1).coerceAtLeast(1) * 1000L)
-        playbackJob = scope.launch {
-            val startedAt = System.currentTimeMillis()
-            while (isActive) {
-                val elapsed = System.currentTimeMillis() - startedAt
-                progress = (elapsed / duration.toFloat()).coerceIn(0f, 1f)
-                if (elapsed >= duration) break
-                delay(80)
+                mediaPlayer.start()
+                isPlaying = true
+                monitor(scope)
             }
-            progress = 1f
-            playingMessageId = null
+        }.onFailure {
+            runCatching { player?.release() }
+            player = null
+            startDemo(message, scope)
         }
     }
 
-    fun stop(resetProgress: Boolean = true) {
-        playbackJob?.cancel()
-        playbackJob = null
-        runCatching { mediaPlayer?.stop() }
-        runCatching { mediaPlayer?.release() }
-        mediaPlayer = null
-        playingMessageId = null
-        if (resetProgress) progress = 0f
+    fun cycleSpeed() {
+        speed = when (speed) {
+            1f -> 1.5f
+            1.5f -> 2f
+            else -> 1f
+        }
+        player?.let(::applySpeed)
+    }
+
+    private fun applySpeed(mediaPlayer: MediaPlayer) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            runCatching { mediaPlayer.playbackParams = PlaybackParams().setSpeed(speed) }
+        }
+    }
+
+    private fun monitor(scope: CoroutineScope) {
+        progressJob?.cancel()
+        progressJob = scope.launch {
+            while (isActive) {
+                val current = player ?: break
+                if (current.duration > 0) progress = current.currentPosition / current.duration.toFloat()
+                delay(70)
+            }
+        }
+    }
+
+    private fun startDemo(message: MessageUi, scope: CoroutineScope) {
+        player = null
+        isPlaying = true
+        tone.startTone(ToneGenerator.TONE_PROP_ACK, 180)
+        demoElapsedMillis = 0f
+        demoDurationMillis = ((message.voiceSeconds ?: 1).coerceAtLeast(1) * 1_000L)
+        demoJob = scope.launch {
+            while (isActive) {
+                if (isPlaying) {
+                    demoElapsedMillis += 70f * speed
+                    progress = (demoElapsedMillis / demoDurationMillis.toFloat()).coerceIn(0f, 1f)
+                    if (demoElapsedMillis >= demoDurationMillis) break
+                }
+                delay(70)
+            }
+            if (isActive) {
+                progress = 1f
+                isPlaying = false
+                activeMessageId = null
+                demoJob = null
+            }
+        }
+    }
+
+    fun stop() {
+        progressJob?.cancel()
+        demoJob?.cancel()
+        progressJob = null
+        demoJob = null
+        runCatching { player?.stop() }
+        runCatching { player?.release() }
+        player = null
+        activeMessageId = null
+        isPlaying = false
+        progress = 0f
+        speed = 1f
+        demoElapsedMillis = 0f
+        demoDurationMillis = 0L
     }
 
     fun release() {

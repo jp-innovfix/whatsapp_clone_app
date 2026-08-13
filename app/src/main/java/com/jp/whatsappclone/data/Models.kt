@@ -16,7 +16,12 @@ data class ContactUi(
 )
 
 enum class MessageDirection { Incoming, Outgoing }
-enum class DeliveryStatus { None, Sent, Delivered, Read }
+enum class DeliveryStatus { None, Pending, Sent, Delivered, Read, Failed }
+
+data class ReactionSummaryUi(
+    val emoji: String,
+    val count: Int,
+)
 
 data class MessageUi(
     val id: String,
@@ -24,13 +29,24 @@ data class MessageUi(
     val body: String = "",
     val time: String,
     val status: DeliveryStatus = DeliveryStatus.None,
-    val reaction: String? = null,
+    val ownReaction: String? = null,
+    val reactionSummaries: List<ReactionSummaryUi> = emptyList(),
     val deleted: Boolean = false,
     val voiceSeconds: Int? = null,
     val audioPath: String? = null,
     val replyToSender: String? = null,
     val replyToBody: String? = null,
+    val replyToMessageId: String? = null,
     val senderName: String? = null,
+    val clientCreatedAtMillis: Long = 0,
+    val failureReason: String? = null,
+    val kind: com.jp.whatsappclone.data.domain.MessageKind = com.jp.whatsappclone.data.domain.MessageKind.TEXT,
+    val storagePath: String? = null,
+    val fileName: String? = null,
+    val mimeType: String? = null,
+    val sizeBytes: Long? = null,
+    val durationMillis: Long? = null,
+    val mediaPath: String? = null,
 )
 
 data class ChatThreadUi(
@@ -38,12 +54,13 @@ data class ChatThreadUi(
     val contact: ContactUi,
     val preview: String,
     val time: String,
+    val lastMessageOutgoing: Boolean = false,
     val unreadCount: Int = 0,
     val pinned: Boolean = false,
     val muted: Boolean = false,
     val draft: Boolean = false,
     val mediaLabel: String? = null,
-    val messages: List<MessageUi> = emptyList(),
+    val archived: Boolean = false,
 )
 
 data class GroupMemberUi(
@@ -117,13 +134,15 @@ data class AppState(
     val draftAdVisible: Boolean = true,
     val messageNotificationsMuted: Boolean = false,
     val statusNotificationsMuted: Boolean = true,
+    val downloadedSearchQuery: String = "",
+    val downloadedSearchConversationIds: Set<String> = emptySet(),
+    val downloadedSearchMemberIds: Set<String> = emptySet(),
+    val showArchived: Boolean = false,
 )
-
-private val mediaFilters = setOf("Photos", "Videos", "Links", "GIFs", "Audio", "Documents", "Stickers", "Polls")
 
 fun AppState.filteredSearchChats(): List<ChatThreadUi> {
     val query = searchQuery.trim()
-    val selectedMedia = searchFilters intersect mediaFilters
+    val downloadedResultsReady = downloadedSearchQuery.equals(query, ignoreCase = true)
     return chats.filter { thread ->
         val searchableText = buildString {
             append(thread.contact.name)
@@ -131,27 +150,26 @@ fun AppState.filteredSearchChats(): List<ChatThreadUi> {
             append(thread.preview)
             append(' ')
             append(thread.mediaLabel.orEmpty())
-            append(' ')
-            thread.messages.forEach { append(it.body).append(' ') }
         }
-        val textMatches = query.isBlank() || searchableText.contains(query, ignoreCase = true)
+        val textMatches = query.isBlank() || if (downloadedResultsReady) {
+            thread.id in downloadedSearchConversationIds || thread.contact.id in downloadedSearchMemberIds
+        } else {
+            searchableText.contains(query, ignoreCase = true)
+        }
         val unreadMatches = "Unread" !in searchFilters || thread.unreadCount > 0
         val contactMatches = "Contacts" !in searchFilters || (thread.contact.isSaved && !thread.contact.isGroup)
-        val nonContactMatches = "Non-contacts" !in searchFilters || !thread.contact.isSaved
-        val mediaMatches = selectedMedia.isEmpty() || selectedMedia.any { filter ->
-            when (filter) {
-                "Photos" -> searchableText.contains("photo", ignoreCase = true)
-                "Videos" -> searchableText.contains("video", ignoreCase = true)
-                "Links" -> searchableText.contains("http", ignoreCase = true)
-                "GIFs" -> searchableText.contains("gif", ignoreCase = true)
-                "Audio" -> thread.messages.any { it.voiceSeconds != null } || searchableText.contains("voice", ignoreCase = true)
-                "Documents" -> searchableText.contains("document", ignoreCase = true) || searchableText.contains(".pdf", ignoreCase = true)
-                "Stickers" -> searchableText.contains("sticker", ignoreCase = true)
-                "Polls" -> searchableText.contains("poll", ignoreCase = true)
-                else -> true
-            }
-        }
-        textMatches && unreadMatches && contactMatches && nonContactMatches && mediaMatches
+        val groupMatches = "Groups" !in searchFilters || thread.contact.isGroup
+        textMatches && unreadMatches && contactMatches && groupMatches
+    }
+}
+
+fun AppState.filteredSearchContacts(): List<ContactUi> {
+    val query = searchQuery.trim()
+    if (query.isBlank() || "Groups" in searchFilters) return emptyList()
+    val downloadedResultsReady = downloadedSearchQuery.equals(query, ignoreCase = true)
+    return contacts.filter { contact ->
+        if (downloadedResultsReady) contact.id in downloadedSearchMemberIds
+        else contact.name.contains(query, ignoreCase = true) || contact.subtitle.contains(query, ignoreCase = true)
     }
 }
 
@@ -159,10 +177,8 @@ fun AppState.filteredHomeChats(): List<ChatThreadUi> = chats.filter { thread ->
     val unreadMatches = "Unread" !in searchFilters || thread.unreadCount > 0
     val favouriteMatches = "Favourites" !in searchFilters || thread.pinned
     val groupMatches = "Groups" !in searchFilters || thread.contact.isGroup
-    val customListMatches = "Bang meet" !in searchFilters ||
-        thread.contact.name.contains("Bengaluru", ignoreCase = true) ||
-        thread.contact.name.contains("INNOVFIX", ignoreCase = true)
-    unreadMatches && favouriteMatches && groupMatches && customListMatches
+    val archiveMatches = thread.archived == showArchived
+    unreadMatches && favouriteMatches && groupMatches && archiveMatches
 }
 
 sealed interface AppAction {
@@ -174,6 +190,7 @@ sealed interface AppAction {
         val text: String,
         val replyToSender: String? = null,
         val replyToBody: String? = null,
+        val replyToMessageId: String? = null,
     ) : AppAction
     data object StartRecording : AppAction
     data object TickRecording : AppAction
@@ -184,11 +201,27 @@ sealed interface AppAction {
         val audioPath: String? = null,
         val durationSeconds: Int? = null,
     ) : AppAction
+    data class SendAttachment(
+        val threadId: String,
+        val sourceUri: String,
+        val kind: com.jp.whatsappclone.data.domain.MessageKind,
+        val fileName: String,
+        val mimeType: String,
+        val sizeBytes: Long? = null,
+        val durationMillis: Long? = null,
+        val caption: String? = null,
+        val replyToMessageId: String? = null,
+    ) : AppAction
     data class SetMessageReaction(val threadId: String, val messageId: String, val reaction: String?) : AppAction
     data class DeleteMessage(val threadId: String, val messageId: String) : AppAction
+    data class RetryMessage(val threadId: String, val messageId: String) : AppAction
     data object DismissDraftAd : AppAction
     data object ToggleMessageMute : AppAction
     data object ToggleStatusMute : AppAction
+    data class SetConversationMuted(val conversationId: String, val muted: Boolean) : AppAction
+    data class SetConversationPinned(val conversationId: String, val pinned: Boolean) : AppAction
+    data class SetConversationArchived(val conversationId: String, val archived: Boolean) : AppAction
+    data object ToggleArchivedView : AppAction
     data class StartCall(val contactId: String, val video: Boolean = false) : AppAction
 }
 
@@ -196,9 +229,17 @@ sealed interface AppAction {
 sealed interface AppDestination : NavKey {
     @Serializable data object Login : AppDestination
     @Serializable data object Main : AppDestination
-    @Serializable data class Chat(val threadId: String) : AppDestination
+    @Serializable data class Chat(
+        val threadId: String,
+        val title: String? = null,
+        val contactId: String? = null,
+    ) : AppDestination
+    @Serializable data class ActiveCall(val contactId: String, val video: Boolean = false) : AppDestination
+    @Serializable data class CallResult(val contactId: String) : AppDestination
     @Serializable data class GroupInfo(val threadId: String) : AppDestination
     @Serializable data object Search : AppDestination
     @Serializable data object ContactPicker : AppDestination
+    @Serializable data object NewGroup : AppDestination
+    @Serializable data class ForwardMessage(val conversationId: String, val messageId: String) : AppDestination
     @Serializable data object Notifications : AppDestination
 }

@@ -19,7 +19,9 @@ import com.jp.whatsappclone.ui.screens.MainScreen
 import com.jp.whatsappclone.ui.screens.NotificationsScreen
 import com.jp.whatsappclone.ui.screens.SearchScreen
 
-private fun demoState(): AppState = MockBusinessRepository().appState.value
+private val demoRepository = MockBusinessRepository()
+private fun demoState(): AppState = demoRepository.appState.value
+private fun demoMessages(threadId: String) = demoRepository.messages(threadId)
 
 @Composable
 private fun PreviewFrame(content: @Composable () -> Unit) {
@@ -52,7 +54,7 @@ private fun MainReference(
 @Preview(name = "01 Conversation", widthDp = 360, heightDp = 780, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun ConversationPreview() = PreviewFrame {
-    ChatScreen("chat_mia", demoState(), {}, {}, {})
+    ChatScreen("chat_mia", demoState(), {}, {}, {}, previewMessages = demoMessages("chat_mia"))
 }
 
 @Preview(name = "02 Chats home", widthDp = 360, heightDp = 780, uiMode = Configuration.UI_MODE_NIGHT_YES)
@@ -86,19 +88,35 @@ private fun ToolsTopPreview() = MainReference(demoState().copy(selectedTab = Mai
 @Preview(name = "09 Attachment sheet", widthDp = 360, heightDp = 780, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun AttachmentPreview() = PreviewFrame {
-    ChatScreen("chat_mia", demoState(), {}, {}, {}, initialAttachmentSheet = true)
+    ChatScreen(
+        "chat_mia",
+        demoState(),
+        {},
+        {},
+        {},
+        previewMessages = demoMessages("chat_mia"),
+        initialAttachmentSheet = true,
+    )
 }
 
 @Preview(name = "10 Focused composer", widthDp = 360, heightDp = 780, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun FocusedComposerPreview() = PreviewFrame {
-    ChatScreen("chat_mia", demoState(), {}, {}, {}, initialComposerText = "Sounds good — sending this now")
+    ChatScreen(
+        "chat_mia",
+        demoState(),
+        {},
+        {},
+        {},
+        previewMessages = demoMessages("chat_mia"),
+        initialComposerText = "Sounds good — sending this now",
+    )
 }
 
 @Preview(name = "11 Notifications", widthDp = 360, heightDp = 780, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun NotificationsPreview() = PreviewFrame {
-    NotificationsScreen(demoState(), {}, {}, {})
+    NotificationsScreen(demoState(), {}, {}, showMessage = {})
 }
 
 @Preview(name = "12 Global search", widthDp = 360, heightDp = 780, uiMode = Configuration.UI_MODE_NIGHT_YES)
@@ -116,5 +134,12 @@ private fun ContactPickerPreview() = PreviewFrame {
 @Preview(name = "14 Voice recording", widthDp = 360, heightDp = 780, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun RecordingPreview() = PreviewFrame {
-    ChatScreen("chat_mia", demoState().copy(recording = RecordingUi(active = true, seconds = 13)), {}, {}, {})
+    ChatScreen(
+        "chat_mia",
+        demoState().copy(recording = RecordingUi(active = true, seconds = 13)),
+        {},
+        {},
+        {},
+        previewMessages = demoMessages("chat_mia"),
+    )
 }
