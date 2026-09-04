@@ -384,9 +384,10 @@ private fun CallsScreen(
                 onSearch = { showMessage(V1_UNAVAILABLE_MESSAGE) },
                 onMore = { showMessage(V1_UNAVAILABLE_MESSAGE) },
             )
+            Spacer(Modifier.height(8.dp))
             LazyRow(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 item { CallShortcut(Icons.Outlined.Call, "Call") { showMessage(V1_UNAVAILABLE_MESSAGE) } }
                 item { CallShortcut(Icons.Rounded.CalendarMonth, "Schedule") { showMessage(V1_UNAVAILABLE_MESSAGE) } }
@@ -442,8 +443,8 @@ private fun CallRow(call: CallLogUi, onCall: (ContactUi, Boolean) -> Unit) {
         Modifier.fillMaxWidth().height(64.dp).clickable { onCall(call.contact, call.video) }.padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(call.contact, size = 38.dp)
-        Spacer(Modifier.width(14.dp))
+        Avatar(call.contact, size = 40.dp)
+        Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 call.contact.name,
@@ -483,15 +484,18 @@ private fun UpdatesScreen(state: AppState, showMessage: (String) -> Unit) {
                 )
             }
             item {
-                Text("Status", color = PrimaryText, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 15.dp, bottom = 8.dp))
+                Text("Status", color = PrimaryText, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp))
                 LazyRow(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    if (state.statuses.none { it.mine }) {
+                        item(key = "add_status") { AddStatusCard { showMessage(V1_UNAVAILABLE_MESSAGE) } }
+                    }
                     items(state.statuses, key = { it.id }) { status -> StatusCard(status) { showMessage(V1_UNAVAILABLE_MESSAGE) } }
                 }
                 Box(
-                    Modifier.padding(horizontal = 20.dp, vertical = 16.dp).fillMaxWidth().height(38.dp).clip(RoundedCornerShape(20.dp))
+                    Modifier.padding(horizontal = 22.dp, vertical = 16.dp).fillMaxWidth().height(40.dp).clip(RoundedCornerShape(20.dp))
                         .border(1.dp, Color(0xFF485158), RoundedCornerShape(24.dp)).clickable { showMessage(V1_UNAVAILABLE_MESSAGE) },
                 contentAlignment = Alignment.Center,
                 ) {
@@ -503,7 +507,10 @@ private fun UpdatesScreen(state: AppState, showMessage: (String) -> Unit) {
                 }
             }
             item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text("Channels", color = PrimaryText, style = MaterialTheme.typography.headlineMedium)
                     Spacer(Modifier.weight(1f))
                     Box(Modifier.clip(RoundedCornerShape(22.dp)).background(ComponentSurface).clickable { showMessage(V1_UNAVAILABLE_MESSAGE) }.padding(horizontal = 18.dp, vertical = 7.dp)) {
@@ -534,9 +541,49 @@ private fun UpdatesScreen(state: AppState, showMessage: (String) -> Unit) {
 }
 
 @Composable
+private fun AddStatusCard(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        Modifier.width(82.dp).height(145.dp).clip(shape)
+            .background(AppBackground)
+            .border(1.dp, Color(0xFF30383D), shape)
+            .clickable(onClick = onClick),
+    ) {
+        Box(
+            Modifier.align(Alignment.TopCenter).padding(top = 28.dp),
+        ) {
+            Avatar(
+                contact = ContactUi(
+                    id = "own",
+                    name = "You",
+                    initials = "Y",
+                    color = 0xFF31576E,
+                ),
+                size = 44.dp,
+            )
+            Box(
+                Modifier.align(Alignment.BottomEnd).size(22.dp).clip(CircleShape)
+                    .background(ActionWhite),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.Add, null, tint = AppBackground, modifier = Modifier.size(17.dp))
+            }
+        }
+        Text(
+            "Add status",
+            color = ActionWhite,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            lineHeight = 15.sp,
+            modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+    }
+}
+
+@Composable
 private fun StatusCard(status: StatusUi, onClick: () -> Unit) {
     Box(
-        Modifier.width(78.dp).height(140.dp).clip(RoundedCornerShape(15.dp))
+        Modifier.width(82.dp).height(145.dp).clip(RoundedCornerShape(14.dp))
             .background(Brush.verticalGradient(listOf(Color(status.gradientStart), Color(status.gradientEnd))))
             .clickable(onClick = onClick),
     ) {

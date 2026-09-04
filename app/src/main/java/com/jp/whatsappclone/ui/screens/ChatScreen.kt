@@ -859,16 +859,17 @@ private fun ChatTopBar(
     onMore: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().background(AppBackground).statusBarsPadding().height(64.dp).padding(start = 4.dp),
+        Modifier.fillMaxWidth().background(AppBackground).statusBarsPadding().height(56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back", tint = PrimaryText) }
+        Spacer(Modifier.width(4.dp))
         Row(
             Modifier.weight(1f).clickable(onClick = onInfo).semantics { contentDescription = if (thread.contact.isGroup) "Open group info" else "Open contact info" },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Avatar(thread.contact, size = 40.dp)
-            Spacer(Modifier.width(10.dp))
+            Avatar(thread.contact, size = 36.dp)
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(thread.contact.name, color = PrimaryText, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
@@ -1873,7 +1874,7 @@ private fun MessageComposer(
             }
         }
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 7.dp),
+            Modifier.fillMaxWidth().padding(start = 8.dp, top = 7.dp, end = 8.dp, bottom = 5.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             Row(
